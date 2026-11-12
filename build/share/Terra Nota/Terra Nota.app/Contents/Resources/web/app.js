@@ -684,10 +684,11 @@
     const css = getComputedStyle(document.documentElement);
     const read = name => css.getPropertyValue(name).trim();
     palette = {
-      sea: read('--sea'), seaLine: read('--sea-line'), coast: read('--coast'), land: read('--land'),
+      sea: read('--sea'), land: read('--land'),
       border: read('--border'), inner: read('--inner'), label: read('--label'), seaLabel: read('--sea-label'),
       been: read('--been'), lived: read('--lived'), beenSoft: read('--been-soft'), livedSoft: read('--lived-soft'),
-      onMark: read('--on-mark'), ink: read('--ink'), paper: read('--paper'), frame: read('--frame'),
+      beenDeep: read('--been-deep'), livedDeep: read('--lived-deep'), boardShadow: read('--board-shadow'), landDeep: read('--land-deep'),
+      onMark: read('--on-mark'), ink: read('--ink'), paper: read('--paper'), card: read('--card'), frame: read('--frame'),
     };
   }
 
@@ -744,6 +745,35 @@
     ctx.globalAlpha = 1;
   }
 
+  // Marked places are raised tiles: a darker copy sits just below each one, so
+  // it casts a little edge onto whatever is south of it. tiles: [key, path, status, color].
+  const LIFT = 1.8;     // screen pixels
+  const deepOf = status => (status === 'lived' ? palette.livedDeep : palette.beenDeep);
+
+  function raise(tiles, now) {
+    if (!tiles.length) return;
+    ctx.save();
+    ctx.translate(0, LIFT / view.k);
+    for (const [key, path, status] of tiles) {
+      const fade = fades.get(key);
+      ctx.globalAlpha = fade ? clamp((now - fade.start) / 240, 0, 1) : 1;
+      ctx.fillStyle = deepOf(status);
+      ctx.fill(path, 'evenodd');
+    }
+    ctx.restore();
+    for (const [key, path, , color] of tiles) paint(path, key, color, now);
+  }
+
+  function roundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
   const toWorldSpace = () => ctx.setTransform(dpr * view.k, 0, 0, dpr * view.k, dpr * view.x, dpr * view.y);
   const toScreenSpace = () => ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -762,56 +792,66 @@
     ctx.fillRect(0, 0, stageW, stageH);
 
     toWorldSpace();
+    // The map is a board on the table: flat water, and a soft edge underneath.
+    ctx.save();
+    ctx.translate(0, 5 / k);
+    ctx.fillStyle = palette.boardShadow;
+    ctx.fill(OUTLINE);
+    ctx.restore();
     ctx.fillStyle = palette.sea;
     ctx.fill(OUTLINE);
-    drawGraticule();
     ctx.save();
     ctx.clip(OUTLINE);
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Old atlases shade the water along every coast. Two soft strokes under the land do the same.
-    if (k < baseK() * 10) {
-      ctx.strokeStyle = palette.coast;
-      for (const [width, alpha] of [[6, .12], [3, .2]]) {
-        ctx.lineWidth = width / k;
-        ctx.globalAlpha = alpha;
-        for (const place of visible) {
-          const path = pathOf(place, level);
-          if (path) ctx.stroke(path);
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
-
+    const raised = [];
     for (const place of visible) {
       const path = pathOf(place, level);
-      if (path) paint(path, place.id, fillOf(place), now);
+      if (!path) continue;
+      const status = statusOf(place.id);
+      if (status) raised.push([place.id, path, status, palette[status]]);
+      else paint(path, place.id, palette.land, now);
     }
+    raise(raised, now);
 
     ctx.strokeStyle = palette.border;
-    ctx.lineWidth = .6 / k;
+    ctx.lineWidth = .7 / k;
     for (const place of visible) {
       const path = pathOf(place, level);
       if (path) ctx.stroke(path);
     }
 
     if (focusFade > 0) {
-      ctx.globalAlpha = .46 * focusFade;
-      ctx.fillStyle = palette.paper;
+      ctx.globalAlpha = .6 * focusFade;
+      ctx.fillStyle = palette.card;
       ctx.fill(OUTLINE);
       ctx.globalAlpha = 1;
     }
 
     const focused = focusId && byId.get(focusId);
     if (focused) {
-      const countryPath = pathOf(focused, 2);
+      const countryPath = pathOf(focused, level === 2 ? 2 : 1) || pathOf(focused, 2);   // the same detail as its states
       const group = STATES[focused.id];
+      const status = statusOf(focused.id);
+      // The open country is picked up off the board: a deeper edge under the whole tile.
+      ctx.save();
+      ctx.translate(0, 3 / k);
+      ctx.globalAlpha = focusFade;
+      ctx.fillStyle = status ? deepOf(status) : palette.landDeep;
+      ctx.fill(countryPath, 'evenodd');
+      ctx.restore();
       paint(countryPath, focused.id, group ? stateBase(focused) : fillOf(focused), now);
       if (group) {
+        const tiles = [];
         for (const state of group.list) {
-          if (inView(boxOf(state))) paint(statePath(state, level), state.id, stateColor(state), now);
+          if (!inView(boxOf(state))) continue;
+          const path = statePath(state, level);
+          const own = stateStatus(state);
+          if (own) tiles.push([state.id, path, own, palette[own]]);
+          else paint(path, state.id, stateColor(state), now);
         }
+        raise(tiles, now);
         ctx.strokeStyle = palette.inner;
         ctx.lineWidth = .7 / k;
         for (const state of group.list) {
@@ -852,36 +892,16 @@
       : pathOf(byId.get(target.id), level) || pathOf(byId.get(target.id), 2);
     if (!path) return;
     if (tinted) {
-      ctx.globalAlpha = .1;
+      ctx.globalAlpha = .08;
       ctx.fillStyle = palette.ink;
       ctx.fill(path, 'evenodd');
       ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = .75;
+    ctx.globalAlpha = .6;
     ctx.strokeStyle = palette.ink;
-    ctx.lineWidth = width / view.k;
+    ctx.lineWidth = width * 1.5 / view.k;
     ctx.stroke(path);
     ctx.globalAlpha = 1;
-  }
-
-  const GRATICULE_LATS = [];
-  for (let lat = -90; lat <= 90; lat += 2) GRATICULE_LATS.push([xScale(lat), wyOf(lat)]);
-
-  function drawGraticule() {
-    ctx.strokeStyle = palette.seaLine;
-    ctx.lineWidth = 1 / view.k;
-    ctx.beginPath();
-    for (let meridian = -180; meridian < 180; meridian += 30) {
-      const rel = wrap(meridian - view.lam);
-      if (Math.abs(rel) > 179.5) continue;              // that one is the map's edge
-      GRATICULE_LATS.forEach(([scale, y], i) => (i ? ctx.lineTo(HALF_W + rel * scale, y) : ctx.moveTo(HALF_W + rel * scale, y)));
-    }
-    for (let lat = -60; lat <= 60; lat += 30) {
-      const half = 180 * xScale(lat);
-      ctx.moveTo(HALF_W - half, wyOf(lat));
-      ctx.lineTo(HALF_W + half, wyOf(lat));
-    }
-    ctx.stroke();
   }
 
   function drawDots(level, left, top, right, bottom) {
@@ -895,15 +915,25 @@
       dots.push({ place, x: ax * k + x, y: ay * k + y, status: statusOf(place.id) });
     }
     dots.sort((a, b) => (a.status ? 1 : 0) - (b.status ? 1 : 0));
+    // Places too small to see are little square tiles, raised once they're marked.
     for (const dot of dots) {
       const active = (hover && hover.id === dot.place.id) || (cardTarget && cardTarget.id === dot.place.id);
-      ctx.beginPath();
-      ctx.arc(dot.x, dot.y, active ? 4.4 : dot.status ? 2.9 : 2, 0, Math.PI * 2);
+      const size = active ? 8.5 : dot.status ? 6.5 : 5;
+      const sx = dot.x - size / 2;
+      const sy = dot.y - size / 2;
+      if (dot.status) {
+        roundedRect(sx, sy + LIFT, size, size, 1.8);
+        ctx.fillStyle = deepOf(dot.status);
+        ctx.fill();
+      }
+      roundedRect(sx, sy, size, size, 1.8);
       ctx.fillStyle = dot.status ? palette[dot.status] : palette.land;
       ctx.fill();
-      ctx.lineWidth = active ? 1.3 : .9;
-      ctx.strokeStyle = active ? palette.ink : dot.status ? palette.land : palette.border;
-      ctx.stroke();
+      if (active || !dot.status) {
+        ctx.lineWidth = active ? 1.3 : 1;
+        ctx.strokeStyle = active ? palette.ink : palette.label;
+        ctx.stroke();
+      }
     }
   }
 
@@ -913,13 +943,13 @@
   // map is still, it moves out to open water if it can, with a thin leader line
   // back to a dot on the shape. While the map moves only the inside names show.
 
-  const SANS = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
+  const SANS = 'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Helvetica Neue", sans-serif';
   const FONTS = {
-    country: `600 9.5px ${SANS}`,
-    state: `500 11px ${SANS}`,
-    leaderCountry: `600 9px ${SANS}`,
-    leaderState: `500 10.5px ${SANS}`,
-    sea: 'italic 11.5px "Iowan Old Style", Palatino, Georgia, serif',
+    country: `700 9.5px ${SANS}`,
+    state: `600 11px ${SANS}`,
+    leaderCountry: `700 9px ${SANS}`,
+    leaderState: `600 10.5px ${SANS}`,
+    sea: `700 10px ${SANS}`,
   };
   const tracked = (text, space) => [...text].join(space);
   const countryText = place => tracked(place.name.toUpperCase(), ' ');
@@ -1284,9 +1314,10 @@
   }
 
   function drawLeaders(items, alpha) {
-    ctx.lineWidth = .8;
-    ctx.strokeStyle = palette.label;
-    ctx.globalAlpha = alpha * .65;
+    ctx.lineWidth = 1.1;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = palette.ink;
+    ctx.globalAlpha = alpha * .42;
     ctx.beginPath();
     for (const item of items) {
       ctx.moveTo(item.ax, item.ay);
@@ -1296,18 +1327,17 @@
     ctx.globalAlpha = alpha;
     for (const item of items) {
       const status = item.type === 'state' ? stateStatus(item.item) : statusOf(item.item.id);
+      // A pin: a coloured dot in a white ring.
       ctx.beginPath();
-      ctx.arc(item.ax, item.ay, item.point ? 2.4 : 1.8, 0, Math.PI * 2);
+      ctx.arc(item.ax, item.ay, item.point ? 3.1 : 2.6, 0, Math.PI * 2);
       ctx.fillStyle = status ? palette[status] : palette.label;
       ctx.fill();
-      if (item.point) {
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = palette.land;
-        ctx.stroke();
-      }
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = palette.card;
+      ctx.stroke();
       writeLabel(item.text, item.tx, item.ty, item.font,
         item.fill || (status ? palette.ink : palette.label),
-        item.halo || (item.land > .5 ? palette.land : palette.sea));
+        item.halo || palette.card);         // a white outline reads the same on water and land
     }
     ctx.globalAlpha = 1;
   }
@@ -1992,11 +2022,6 @@
     settle();
     draw();
   }
-
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    readPalette();
-    invalidate();
-  });
 
   readPalette();
   new ResizeObserver(resize).observe(stage);

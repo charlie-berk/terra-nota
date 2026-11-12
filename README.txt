@@ -33,6 +33,11 @@ THE MAP
   Big lakes (the Great Lakes, Victoria, Baikal, Great Bear and so on) are
   water. Smaller ones, like Lake Champlain, are drawn as land.
 
+  The look is flat and bright, like a little city-building board game: pale
+  water, cream land, and every place you've marked raised as a coloured tile.
+  It stays light even when your Mac is in dark mode. The colours are all at
+  the top of web/style.css.
+
   A name sits inside its country or state when it fits. When it doesn't, it
   moves out to open water (or into a neighbouring country) with a thin line
   back to a dot on the place, once the map stops moving. A state walled in

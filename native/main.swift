@@ -149,11 +149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.titlebarAppearsTransparent = true
         window.minSize = NSSize(width: 860, height: 560)
         window.isReleasedWhenClosed = false
-        window.backgroundColor = NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? NSColor(srgbRed: 0.094, green: 0.11, blue: 0.11, alpha: 1)
-                : NSColor(srgbRed: 0.957, green: 0.933, blue: 0.886, alpha: 1)
-        }
+        // The map has one bright, flat look, so the window stays light in dark mode too.
+        window.appearance = NSAppearance(named: .aqua)
+        window.backgroundColor = NSColor(srgbRed: 0.922, green: 0.902, blue: 0.863, alpha: 1)
         window.center()
         window.setFrameAutosaveName("TerraNotaMain")
 
