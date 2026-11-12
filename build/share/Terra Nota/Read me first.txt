@@ -1,0 +1,18 @@
+TERRA NOTA
+A private map of everywhere you've been and lived. It runs entirely on your
+Mac and never goes online. Needs macOS 12 or later, on any Mac.
+
+INSTALLING
+  1. Drag Terra Nota.app into your Applications folder.
+  2. Open it. macOS will say it can't check the app, because it isn't from
+     the App Store or a registered developer. To open it anyway:
+       macOS 14 or earlier: right-click the app, choose Open, then Open.
+       macOS 15 or later:   try to open it once and close the warning, then
+                            go to System Settings > Privacy & Security,
+                            scroll down, and click Open Anyway.
+     You only need to do this once.
+
+USING IT
+  Click a country to open it and tick off its states. Drag or scroll to move
+  the map (it wraps all the way around), pinch to zoom. Your marks are saved
+  in ~/Library/Application Support/Terra Nota, with daily backups.

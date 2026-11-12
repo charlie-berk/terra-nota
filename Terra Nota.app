@@ -1,0 +1,1 @@
+/Users/charlieberk/Applications/Terra Nota.app
