@@ -111,6 +111,9 @@ WHAT'S IN THIS FOLDER
   native/    The Mac window around it, and the icon.
   tools/     The script that compiles the map.
   build/     Build leftovers. Safe to delete.
+  vercel.json  Tells Vercel the website is the web/ folder, so the page finds
+             its style sheet, script and map data. Without it the site loads
+             as bare, unstyled text with no map.
 
 
 Map data: Natural Earth (naturalearthdata.com), public domain.
